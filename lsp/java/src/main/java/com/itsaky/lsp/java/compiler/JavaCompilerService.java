@@ -49,20 +49,22 @@ import javax.tools.StandardLocation;
 
 public class JavaCompilerService implements CompilerProvider {
 
-    private CompileBatch cachedCompile;
-
-    final Set<Path> classPath, docPath;
-    final Set<String> jdkClasses = new HashSet<>(), classPathClasses;
-    final ReusableCompiler compiler = new ReusableCompiler();
-    final SynchronizedTask synchronizedTask = new SynchronizedTask();
-    final List<Diagnostic<? extends JavaFileObject>> diagnostics = new ArrayList<>();
-    final Map<JavaFileObject, Long> cachedModified = new HashMap<>();
-
+    private static final Cache<String, Boolean> cacheContainsWord = new Cache<>();
+    private static final Cache<Void, List<String>> cacheContainsType = new Cache<>();
+    private static final Logger LOG = Logger.newInstance("JavaCompilerService");
+    protected final Set<Path> classPath, docPath;
+    protected final Set<String> jdkClasses = ScanClassPath.jdkTopLevelClasses(), classPathClasses;
+    protected final ReusableCompiler compiler = new ReusableCompiler();
+    protected final SynchronizedTask synchronizedTask = new SynchronizedTask();
+    protected final List<Diagnostic<? extends JavaFileObject>> diagnostics = new ArrayList<>();
+    protected final Map<JavaFileObject, Long> cachedModified = new HashMap<>();
     // Use the same file manager for multiple tasks, so we don't repeatedly re-compile the same
     // files
     // TODO intercept files that aren't in the batch and erase method bodies so compilation is
     // faster
-    final SourceFileManager fileManager;
+    protected final SourceFileManager fileManager;
+    private final Cache<Void, List<String>> cacheFileImports = new Cache<>();
+    private CompileBatch cachedCompile;
 
     public JavaCompilerService(Set<Path> classPath, Set<Path> docPath) {
         this.classPath = Collections.unmodifiableSet(classPath);
@@ -144,16 +146,12 @@ public class JavaCompilerService implements CompilerProvider {
         return synchronizedTask;
     }
 
-    private static final Cache<String, Boolean> cacheContainsWord = new Cache<>();
-
     private boolean containsWord(Path file, String word) {
         if (cacheContainsWord.needs(file, word)) {
             cacheContainsWord.load(file, word, StringSearch.containsWord(file, word));
         }
         return cacheContainsWord.get(file, word);
     }
-
-    private static final Cache<Void, List<String>> cacheContainsType = new Cache<>();
 
     private boolean containsType(Path file, String className) {
         if (cacheContainsType.needs(file, null)) {
@@ -164,8 +162,6 @@ public class JavaCompilerService implements CompilerProvider {
         }
         return cacheContainsType.get(file, null).contains(className);
     }
-
-    private final Cache<Void, List<String>> cacheFileImports = new Cache<>();
 
     private List<String> readImports(Path file) {
         if (cacheFileImports.needs(file, null)) {
@@ -367,6 +363,4 @@ public class JavaCompilerService implements CompilerProvider {
             }
         }
     }
-
-    private static final Logger LOG = Logger.newInstance("JavaCompilerService");
 }

@@ -33,7 +33,6 @@ import com.itsaky.lsp.java.rewrite.ConvertVariableToStatement;
 import com.itsaky.lsp.java.rewrite.CreateMissingMethod;
 import com.itsaky.lsp.java.rewrite.GenerateRecordConstructor;
 import com.itsaky.lsp.java.rewrite.ImplementAbstractMethods;
-import com.itsaky.lsp.java.rewrite.NoRewrite;
 import com.itsaky.lsp.java.rewrite.OverrideInheritedMethod;
 import com.itsaky.lsp.java.rewrite.RemoveClass;
 import com.itsaky.lsp.java.rewrite.RemoveException;
@@ -223,14 +222,17 @@ public class CodeActionProvider {
         final List<Pair<String, Rewrite>> actions =
                 synchronizedTask.get(
                         task -> {
-                            List<Pair<String, Rewrite>> pairs = new ArrayList<>();
+                            List<Pair<String, Rewrite>> rewrites = new ArrayList<>();
                             for (DiagnosticItem d : params.getDiagnostics()) {
-                                Pair<String, Rewrite> pair = codeActionForDiagnostic(task, file, d);
-                                if (!TextUtils.isEmpty(pair.first) && pair.second != null) {
-                                    pairs.add(pair);
-                                }
+                                List<Pair<String, Rewrite>> pairs =
+                                        codeActionForDiagnostic(task, file, d);
+                                pairs.removeIf(
+                                        pair ->
+                                                TextUtils.isEmpty(pair.first)
+                                                        || pair.second == null);
+                                rewrites.addAll(pairs);
                             }
-                            return pairs;
+                            return rewrites;
                         });
 
         final List<CodeActionItem> result = new ArrayList<>();
@@ -252,7 +254,7 @@ public class CodeActionProvider {
         return result;
     }
 
-    private Pair<String, Rewrite> codeActionForDiagnostic(
+    private List<Pair<String, Rewrite>> codeActionForDiagnostic(
             CompileTask task, Path file, DiagnosticItem d) {
         // TODO this should be done asynchronously using executeCommand
         final Rewrite rewrite;
@@ -316,19 +318,25 @@ public class CodeActionProvider {
                 break;
             case "compiler.err.cant.resolve.location":
                 CharSequence simpleName = extractRange(task, d.getRange());
-                List<CodeActionItem> allImports = new ArrayList<>();
-                for (String qualifiedName : compiler.publicTopLevelTypes()) {
-                    if (qualifiedName.endsWith("." + simpleName)) {
-                        String actionTitle = "Import '" + qualifiedName + "'";
-                        final Rewrite addImport = new AddImport(file, qualifiedName);
-                        allImports.addAll(createQuickFix(actionTitle, addImport));
+                List<Pair<String, Rewrite>> allImports = new ArrayList<>();
+                final List<String> classes = compiler.publicTopLevelTypes();
+
+                for (int i = 0; i < classes.size(); i++) {
+                    final String klass = classes.get(i);
+                    if (!klass.endsWith("." + simpleName)) {
+                        continue;
                     }
+
+                    String actionTitle = "Import '" + klass + "'";
+                    final Rewrite addImport = new AddImport(file, klass);
+                    allImports.add(Pair.create(actionTitle, addImport));
                 }
-                return Pair.create("", new NoRewrite(allImports));
+
+                return allImports;
             case "compiler.err.var.not.initialized.in.default.constructor":
                 final String needsConstructor = findClassNeedingConstructor(task, d.getRange());
                 if (needsConstructor == null) {
-                    return Pair.create("", null);
+                    return Collections.singletonList(Pair.create("", null));
                 }
 
                 rewrite = new GenerateRecordConstructor(needsConstructor);
@@ -339,7 +347,7 @@ public class CodeActionProvider {
                         (Diagnostic<? extends JavaFileObject>) d.getExtra();
                 JCDiagnostic jcDiagnostic = unwrapJCDiagnostic(diagnostic);
                 if (jcDiagnostic == null) {
-                    return Pair.create("", null);
+                    return Collections.singletonList(Pair.create("", null));
                 }
 
                 rewrite = new ImplementAbstractMethods(jcDiagnostic);
@@ -351,10 +359,10 @@ public class CodeActionProvider {
                 title = "Create missing method";
                 break;
             default:
-                return Pair.create("", null);
+                return Collections.singletonList(Pair.create("", null));
         }
 
-        return Pair.create(title, rewrite);
+        return Collections.singletonList(Pair.create(title, rewrite));
     }
 
     @Nullable

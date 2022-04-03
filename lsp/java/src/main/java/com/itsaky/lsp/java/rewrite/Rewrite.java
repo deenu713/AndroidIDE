@@ -49,7 +49,7 @@ public abstract class Rewrite {
 
     public List<CodeActionItem> asCodeActions(CompilerProvider compiler, String title) {
         final Map<Path, TextEdit[]> edits = rewrite(compiler);
-        if (edits == null) {
+        if (edits == null || edits.isEmpty()) {
             return Collections.emptyList();
         }
 

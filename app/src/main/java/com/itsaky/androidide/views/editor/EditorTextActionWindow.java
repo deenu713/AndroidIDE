@@ -30,6 +30,7 @@ import com.itsaky.androidide.R;
 import com.itsaky.androidide.adapters.TextActionItemAdapter;
 import com.itsaky.androidide.databinding.LayoutEditorActionsBinding;
 import com.itsaky.androidide.utils.Logger;
+import com.itsaky.lsp.models.CodeActionItem;
 import io.github.rosemoe.sora.event.HandleStateChangeEvent;
 import io.github.rosemoe.sora.event.ScrollEvent;
 import io.github.rosemoe.sora.event.SelectionChangeEvent;
@@ -58,6 +59,7 @@ public class EditorTextActionWindow extends EditorPopupWindow
 
     private static final long DELAY = 200;
     protected final List<SubscriptionReceipt<?>> subscriptionReceipts;
+    private final List<CodeActionItem> codeActions = new ArrayList<>(0);
     private final Set<IDEEditor.TextAction> registeredActions = new TreeSet<>();
     private IDEEditor editor;
     private LayoutEditorActionsBinding binding;
@@ -125,7 +127,7 @@ public class EditorTextActionWindow extends EditorPopupWindow
 
         final var actions =
                 this.registeredActions.stream()
-                        .filter(this::canShowAction)
+                        .filter(action -> canShowAction(editor, action))
                         .collect(Collectors.toList());
         this.binding.textActions.setAdapter(
                 new TextActionItemAdapter(actions, this::performTextAction));
@@ -142,6 +144,18 @@ public class EditorTextActionWindow extends EditorPopupWindow
         this.editor = null;
         this.binding = null;
         this.unsubscribeEvents();
+    }
+
+    @Override
+    public void updateCodeActions(@NonNull List<CodeActionItem> actions) {
+        codeActions.clear();
+        codeActions.addAll(actions);
+    }
+
+    @NonNull
+    @Override
+    public List<CodeActionItem> getActions() {
+        return codeActions;
     }
 
     @NonNull
@@ -166,7 +180,7 @@ public class EditorTextActionWindow extends EditorPopupWindow
         final var dp16 = dp8 * 2;
         final var actions =
                 this.registeredActions.stream()
-                        .filter(this::canShowAction)
+                        .filter(action -> canShowAction(editor, action))
                         .collect(Collectors.toList());
         actionsList.setAdapter(new TextActionItemAdapter(actions, this::performTextAction));
         this.binding
@@ -184,17 +198,6 @@ public class EditorTextActionWindow extends EditorPopupWindow
                 this.binding.getRoot().getMeasuredWidth(),
                 this.binding.getRoot().getMeasuredHeight());
         super.show();
-    }
-
-    private boolean canShowAction(@NonNull IDEEditor.TextAction action) {
-
-        // all the actions are visible by default
-        // so we need to get a confirmation from the editor
-        if (action.visible) {
-            return editor.shouldShowTextAction(action.id);
-        }
-
-        return false;
     }
 
     private void subscribeToEvents() {
