@@ -84,9 +84,10 @@ public class SplashActivity extends StudioActivity {
                 goToMain();
             } else {
                 startActivity(new Intent(this, DownloadActivity.class));
-                finish();*/
-             goToMain();
-            }
+                finish();
+             
+            }*/
+                 goToMain();
         }
     }
 
